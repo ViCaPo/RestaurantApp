@@ -1,0 +1,33 @@
+:root {
+  color-scheme: light;
+
+  /* Paleta de marca — editar aquí para cambiar el look completo del sistema. */
+  --color-fondo: #f4f5fb;
+  --color-superficie: #ffffff;
+  --color-borde: #e2e5f0;
+  --color-texto: #1e2233;
+  --color-texto-tenue: #6b7280;
+
+  --color-primario: #4f46e5;
+  --color-primario-claro: #e0e7ff;
+  --color-primario-oscuro: #3730a3;
+  --color-primario-deshabilitado: #a5b4fc;
+
+  --color-exito: #16a34a;
+  --color-exito-claro: #dcfce7;
+  --color-error: #dc2626;
+  --color-error-claro: #fee2e2;
+  --color-advertencia: #d97706;
+  --color-advertencia-claro: #fef3c7;
+  --color-info: #0284c7;
+  --color-info-claro: #e0f2fe;
+  --color-neutro-claro: #eef0f5;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
