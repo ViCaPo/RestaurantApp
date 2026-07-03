@@ -57,23 +57,29 @@ input[type="checkbox"] {
 }
 
 .mesas-shell {
-  max-width: 1200px;
+  max-width: 1600px;
   margin: 0 auto;
 }
 
 .seccion-zona {
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
 }
 
 .titulo-zona {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--color-texto-tenue);
-  margin: 0 0 0.6rem;
+  margin: 0 0 0.5rem;
 }
 
-.grid-mesas,
+.grid-mesas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 0.6rem;
+  margin: 0;
+}
+
 .grid-productos {
   display: flex;
   flex-wrap: wrap;
@@ -86,13 +92,13 @@ input[type="checkbox"] {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  width: 144px;
-  height: 144px;
-  border-radius: 16px;
+  gap: 3px;
+  min-height: 108px;
+  border-radius: 12px;
   border: 1px solid var(--color-borde);
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
+  padding: 8px 6px;
   background: var(--color-superficie);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
   transition: transform 0.12s ease, box-shadow 0.12s ease;
@@ -108,12 +114,14 @@ input[type="checkbox"] {
 }
 
 .mesa-icono {
-  font-size: 1.4rem;
+  font-size: 1.2rem;
   color: var(--color-texto-tenue);
 }
 
 .mesa-nombre {
-  font-size: 1rem;
+  font-size: 0.92rem;
+  text-align: center;
+  line-height: 1.1;
 }
 
 .mesa-capacidad {
@@ -696,12 +704,63 @@ input[type="checkbox"] {
   white-space: nowrap;
 }
 
-.tabla-admin td:last-child {
+.tabla-admin td.acciones-tabla {
   display: flex;
   flex-wrap: nowrap;
   gap: 6px;
   align-items: center;
   justify-content: flex-end;
+}
+
+.tabla-admin th.col-acciones {
+  text-align: right;
+}
+
+/* Botón de acción solo-icono (columna "Acciones" del backoffice) */
+.boton-icono {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--color-borde);
+  border-radius: 8px;
+  background: var(--color-superficie);
+  color: var(--color-texto-tenue);
+  cursor: pointer;
+  font-size: 18px;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.boton-icono:hover {
+  background: var(--color-fondo);
+  color: var(--color-primario);
+  border-color: var(--color-primario);
+}
+
+.boton-icono:active {
+  transform: scale(0.95);
+}
+
+.boton-icono-peligro {
+  color: var(--color-error);
+  border-color: var(--color-error-claro);
+}
+
+.boton-icono-peligro:hover {
+  background: var(--color-error-claro);
+  color: var(--color-error);
+  border-color: var(--color-error);
+}
+
+/* Formularios del backoffice: tamaño escritorio (no touch). */
+.admin-shell .form-modal input,
+.admin-shell .form-modal select,
+.admin-shell .bloque-logo input {
+  min-height: 38px;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.9rem;
 }
 
 .celda-vacia {
@@ -981,6 +1040,33 @@ input[type="checkbox"] {
   margin-bottom: 4px;
 }
 
+.ticket-cocina-header-derecha {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.boton-imprimir-comanda {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--color-borde);
+  border-radius: 8px;
+  background: var(--color-superficie);
+  color: var(--color-texto-tenue);
+  cursor: pointer;
+  font-size: 15px;
+}
+
+.boton-imprimir-comanda:hover {
+  background: var(--color-fondo);
+  color: var(--color-primario);
+  border-color: var(--color-primario);
+}
+
 .ticket-cocina-mesa {
   font-weight: 700;
   font-size: 1.05rem;
@@ -1256,6 +1342,215 @@ input[type="checkbox"] {
   margin-top: 0.25rem;
 }
 
+.texto-confirmacion {
+  margin: 0 0 1.25rem;
+  color: var(--color-texto);
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+.datos-transaccion {
+  border: 1px solid var(--color-borde);
+  border-radius: 10px;
+  padding: 0.6rem 0.9rem 0.9rem;
+  margin: 0.25rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.datos-transaccion legend {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-texto-tenue);
+  padding: 0 0.4rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.datos-transaccion .texto-tenue {
+  margin: 0;
+}
+
+/* Caja: apertura, turno y corte */
+.panel-apertura-caja {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 1rem;
+  background: var(--color-superficie);
+  border: 1px solid var(--color-borde);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  margin-top: 1rem;
+}
+
+.panel-apertura-caja-texto {
+  flex: 1;
+  min-width: 220px;
+}
+
+.panel-apertura-caja-texto h2 {
+  margin: 0 0 0.25rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel-apertura-caja label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.9rem;
+}
+
+.panel-apertura-caja input {
+  min-height: 44px;
+  padding: 0.5rem 0.7rem;
+  border-radius: 10px;
+  border: 1px solid var(--color-borde);
+  font-size: 1rem;
+  width: 160px;
+}
+
+.barra-turno-caja {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  background: var(--color-exito-claro);
+  border: 1px solid var(--color-exito);
+  border-radius: 10px;
+  padding: 0.6rem 1rem;
+  margin: 1rem 0;
+}
+
+.barra-turno-caja-estado {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--color-exito);
+}
+
+.barra-turno-caja button {
+  margin-left: auto;
+}
+
+.corte-caja {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.corte-caja-fila {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.corte-caja-fila-destacada {
+  border-top: 1px solid var(--color-borde);
+  padding-top: 0.5rem;
+  font-size: 1.05rem;
+}
+
+.corte-caja-metodos {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.25rem 0;
+}
+
+.corte-caja-metodos td {
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--color-borde);
+}
+
+.corte-caja-metodos td:last-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.corte-caja-resultado {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-radius: 10px;
+  padding: 0.6rem 0.9rem;
+  font-weight: 700;
+  margin-top: 0.25rem;
+}
+
+.corte-caja-resultado-cuadrado {
+  background: var(--color-exito-claro);
+  color: var(--color-exito);
+}
+
+.corte-caja-resultado-faltante {
+  background: var(--color-error-claro);
+  color: var(--color-error);
+}
+
+.corte-caja-resultado-sobrante {
+  background: var(--color-advertencia-claro);
+  color: var(--color-advertencia);
+}
+
+/* Configuración del ticket */
+.config-ticket {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  align-items: flex-start;
+}
+
+.config-ticket-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  flex: 1 1 320px;
+  max-width: 440px;
+}
+
+.config-ticket-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.9rem;
+}
+
+.config-ticket-form input:not([type="checkbox"]),
+.config-ticket-form select {
+  min-height: 38px;
+  padding: 0.4rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--color-borde);
+  font-size: 0.9rem;
+  background: var(--color-superficie);
+  color: var(--color-texto);
+}
+
+.config-ticket-form .toggle-config {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+}
+
+.config-ticket-preview {
+  flex: 0 0 auto;
+}
+
+.ticket-paper {
+  background: #fff;
+  border-radius: 6px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+  padding: 6px;
+  overflow: auto;
+  display: inline-block;
+}
+
 /* Toasts */
 .toast-container {
   position: fixed;
@@ -1341,14 +1636,26 @@ input[type="checkbox"] {
 
 .campo-color {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
+  flex-direction: column;
+  gap: 0.35rem;
   background: var(--color-superficie);
   border: 1px solid var(--color-borde);
   border-radius: 8px;
   padding: 0.6rem 0.85rem;
   font-size: 0.85rem;
+}
+
+.campo-color-encabezado {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.campo-color-descripcion {
+  font-size: 0.78rem;
+  color: var(--color-texto-tenue);
+  line-height: 1.35;
 }
 
 .campo-color input[type="color"] {
@@ -1359,4 +1666,57 @@ input[type="checkbox"] {
   padding: 0;
   cursor: pointer;
   background: none;
+  flex-shrink: 0;
+}
+
+/* Layout de Apariencia: columna de grupos de colores + panel de vista previa fijo */
+.apariencia-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.apariencia-colores {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+.grupo-colores-titulo {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-texto-tenue);
+  margin: 0 0 0.6rem;
+}
+
+.apariencia-preview {
+  position: sticky;
+  top: 1rem;
+}
+
+.apariencia-preview-tarjeta {
+  background: var(--color-superficie);
+  border: 1px solid var(--color-borde);
+  border-radius: 12px;
+  padding: 1rem;
+  margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.apariencia-preview-texto {
+  margin: 0;
+  color: var(--color-texto);
+  font-weight: 600;
+}
+
+.apariencia-preview-fila {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
 }

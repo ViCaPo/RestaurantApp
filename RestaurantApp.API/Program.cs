@@ -25,7 +25,6 @@ builder.WebHost.ConfigureKestrel(options =>
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("Default")));
-// SQLite alternativo: options.UseSqlite(builder.Configuration.GetConnectionString("Sqlite"));
 
 builder.Services.AddScoped<IAppDbContext>(sp => sp.GetRequiredService<AppDbContext>());
 builder.Services.AddScoped<ComandaService>();

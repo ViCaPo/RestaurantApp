@@ -7,6 +7,7 @@ import Caja from "./pages/Caja";
 import Administracion from "./pages/Administracion";
 import Login from "./pages/Login";
 import { ToastProvider } from "./components/Toast";
+import { ConfirmacionProvider } from "./components/Confirmacion";
 import { TemaProvider } from "./contexts/TemaContext";
 import { SesionProvider, useSesion } from "./contexts/SesionContext";
 import { rutaInicioPorRol } from "./roles";
@@ -24,6 +25,7 @@ function App() {
   return (
     <TemaProvider>
       <ToastProvider>
+        <ConfirmacionProvider>
         <SesionProvider>
           <BrowserRouter>
             <Routes>
@@ -71,6 +73,7 @@ function App() {
             </Routes>
           </BrowserRouter>
         </SesionProvider>
+        </ConfirmacionProvider>
       </ToastProvider>
     </TemaProvider>
   );

@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using RestaurantApp.Infrastructure.Data;
 
@@ -11,9 +12,11 @@ using RestaurantApp.Infrastructure.Data;
 namespace RestaurantApp.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260701133300_AgregarConfigTicket")]
+    partial class AgregarConfigTicket
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -204,9 +207,6 @@ namespace RestaurantApp.Infrastructure.Migrations
                     b.Property<bool>("ImprimirAutomatico")
                         .HasColumnType("bit");
 
-                    b.Property<string>("LogoUrl")
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<string>("MensajePie")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -261,12 +261,6 @@ namespace RestaurantApp.Infrastructure.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<bool>("Activo")
-                        .HasColumnType("bit");
-
-                    b.Property<int>("AnchoPapelComandaMm")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("ImprimirComandaAutomatico")
                         .HasColumnType("bit");
 
                     b.Property<string>("Nombre")

@@ -7,6 +7,7 @@ using RestaurantApp.Core.Interfaces;
 namespace RestaurantApp.API.Controllers;
 
 public record EstacionDto(string Nombre);
+public record ConfigImpresionEstacionDto(bool ImprimirComandaAutomatico, int AnchoPapelComandaMm);
 
 [ApiController]
 [Route("api/[controller]")]
@@ -40,6 +41,20 @@ public class EstacionesController : ControllerBase
         var estacion = await _db.Estaciones.FindAsync(id);
         if (estacion == null) return NotFound(new { error = "Estación no encontrada." });
         estacion.Nombre = dto.Nombre;
+        await _db.SaveChangesAsync();
+        return Ok(estacion);
+    }
+
+    [HttpPut("{id}/impresion")]
+    [Authorize(Roles = "Administrador")]
+    public async Task<IActionResult> ActualizarImpresion(int id, [FromBody] ConfigImpresionEstacionDto dto)
+    {
+        var estacion = await _db.Estaciones.FindAsync(id);
+        if (estacion == null) return NotFound(new { error = "Estación no encontrada." });
+        if (dto.AnchoPapelComandaMm != 58 && dto.AnchoPapelComandaMm != 80)
+            return BadRequest(new { error = "El ancho de papel debe ser 58 o 80 mm." });
+        estacion.ImprimirComandaAutomatico = dto.ImprimirComandaAutomatico;
+        estacion.AnchoPapelComandaMm = dto.AnchoPapelComandaMm;
         await _db.SaveChangesAsync();
         return Ok(estacion);
     }

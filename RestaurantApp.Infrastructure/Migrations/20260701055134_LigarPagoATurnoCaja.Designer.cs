@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using RestaurantApp.Infrastructure.Data;
 
@@ -11,9 +12,11 @@ using RestaurantApp.Infrastructure.Data;
 namespace RestaurantApp.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260701055134_LigarPagoATurnoCaja")]
+    partial class LigarPagoATurnoCaja
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -186,72 +189,6 @@ namespace RestaurantApp.Infrastructure.Migrations
                     b.ToTable("ComandaItemExtras");
                 });
 
-            modelBuilder.Entity("RestaurantApp.Core.Entidades.ConfigTicket", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("AnchoPapelMm")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Direccion")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<bool>("ImprimirAutomatico")
-                        .HasColumnType("bit");
-
-                    b.Property<string>("LogoUrl")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("MensajePie")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<bool>("MostrarLogo")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("MostrarMeseroCajero")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("MostrarPropina")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("MostrarReferencia")
-                        .HasColumnType("bit");
-
-                    b.Property<string>("Rfc")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Telefono")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("ConfigsTicket");
-
-                    b.HasData(
-                        new
-                        {
-                            Id = 1,
-                            AnchoPapelMm = 80,
-                            Direccion = "",
-                            ImprimirAutomatico = true,
-                            MensajePie = "¡Gracias por su visita!",
-                            MostrarLogo = true,
-                            MostrarMeseroCajero = true,
-                            MostrarPropina = true,
-                            MostrarReferencia = true,
-                            Rfc = "",
-                            Telefono = ""
-                        });
-                });
-
             modelBuilder.Entity("RestaurantApp.Core.Entidades.Estacion", b =>
                 {
                     b.Property<int>("Id")
@@ -261,12 +198,6 @@ namespace RestaurantApp.Infrastructure.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<bool>("Activo")
-                        .HasColumnType("bit");
-
-                    b.Property<int>("AnchoPapelComandaMm")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("ImprimirComandaAutomatico")
                         .HasColumnType("bit");
 
                     b.Property<string>("Nombre")

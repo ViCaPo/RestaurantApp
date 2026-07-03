@@ -18,5 +18,6 @@ public interface IAppDbContext
     DbSet<ComandaItemExtra> ComandaItemExtras { get; }
     DbSet<Estacion> Estaciones { get; }
     DbSet<SesionToken> SesionTokens { get; }
+    DbSet<ConfigTicket> ConfigsTicket { get; }
     Task<int> SaveChangesAsync(CancellationToken ct = default);
 }

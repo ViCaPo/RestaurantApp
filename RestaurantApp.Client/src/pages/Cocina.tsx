@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, type ItemCocina, type EstadoItem, type Estacion } from "../api";
 import { obtenerConexionComandas } from "../signalr";
 import EnlaceAdmin from "../components/EnlaceAdmin";
 import { useSesion } from "../contexts/SesionContext";
+import { imprimirComanda, type DatosComanda } from "../ticket";
 
 const SIGUIENTE_ESTADO: Record<EstadoItem, EstadoItem | null> = {
   Pendiente: "Preparando",
@@ -43,11 +44,28 @@ function agruparPorMesa(items: ItemCocina[]) {
   }
   return Array.from(grupos.values())
     .map((lista) => ({
+      comandaId: lista[0].comandaId,
       mesaNombre: lista[0].mesaNombre,
       fechaMasAntigua: lista.reduce((min, i) => (i.fechaCreacion < min ? i.fechaCreacion : min), lista[0].fechaCreacion),
       items: lista.sort((a, b) => a.fechaCreacion.localeCompare(b.fechaCreacion)),
     }))
     .sort((a, b) => a.fechaMasAntigua.localeCompare(b.fechaMasAntigua));
+}
+
+function itemsCocinaAComanda(mesaNombre: string, comandaId: number, items: ItemCocina[], estacion?: string | null): DatosComanda {
+  return {
+    mesa: mesaNombre,
+    comandaId,
+    fecha: new Date(),
+    estacion,
+    items: items.map((i) => ({
+      cantidad: i.cantidad,
+      nombre: i.productoNombre,
+      numeroComensal: i.numeroComensal,
+      notas: i.notas,
+      extras: i.extras,
+    })),
+  };
 }
 
 function reproducirAlerta() {
@@ -79,6 +97,9 @@ export default function Cocina() {
   const [estaciones, setEstaciones] = useState<Estacion[]>([]);
   const [estacionId, setEstacionId] = useState<number | "">("");
   const [, setTick] = useState(0);
+  const loteAutoImpresion = useRef(new Map<number, { items: ItemCocina[]; temporizador: ReturnType<typeof setTimeout> }>());
+
+  const estacionActual = estaciones.find((e) => e.id === estacionId) ?? null;
 
   useEffect(() => {
     const intervalo = setInterval(() => setTick((t) => t + 1), 30000);
@@ -112,6 +133,24 @@ export default function Cocina() {
       reproducirAlerta();
       setIdsNuevos((actual) => [...actual, item.itemId]);
       setTimeout(() => setIdsNuevos((actual) => actual.filter((id) => id !== item.itemId)), 3000);
+
+      // Auto-impresión: solo si esta pantalla está filtrada a UNA estación y esa
+      // estación tiene activada la impresión automática. Se agrupan los items que
+      // llegan juntos (mismo envío a cocina) para imprimir una sola comanda.
+      if (estacionActual?.imprimirComandaAutomatico) {
+        const lote = loteAutoImpresion.current;
+        const existente = lote.get(item.comandaId);
+        if (existente) clearTimeout(existente.temporizador);
+        const itemsDelLote = existente ? [...existente.items, item] : [item];
+        const temporizador = setTimeout(() => {
+          lote.delete(item.comandaId);
+          imprimirComanda(
+            itemsCocinaAComanda(item.mesaNombre, item.comandaId, itemsDelLote, estacionActual.nombre),
+            estacionActual.anchoPapelComandaMm
+          );
+        }, 700);
+        lote.set(item.comandaId, { items: itemsDelLote, temporizador });
+      }
     }
 
     function alRecibirActualizado(item: ItemCocina) {
@@ -131,7 +170,8 @@ export default function Cocina() {
       conexion.off("item-nuevo", alRecibirNuevo);
       conexion.off("item-actualizado", alRecibirActualizado);
     };
-  }, [estacionId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [estacionId, estaciones]);
 
   async function avanzar(item: ItemCocina) {
     const siguiente = SIGUIENTE_ESTADO[item.estado];
@@ -208,8 +248,28 @@ export default function Cocina() {
                         <span className="ticket-cocina-mesa">
                           <i className="ti ti-tools-kitchen-2" aria-hidden="true"></i> {grupo.mesaNombre}
                         </span>
-                        <span className="ticket-cocina-tiempo">
-                          <i className="ti ti-clock" aria-hidden="true"></i> {tiempoTranscurrido(grupo.fechaMasAntigua)}
+                        <span className="ticket-cocina-header-derecha">
+                          <span className="ticket-cocina-tiempo">
+                            <i className="ti ti-clock" aria-hidden="true"></i> {tiempoTranscurrido(grupo.fechaMasAntigua)}
+                          </span>
+                          <button
+                            className="boton-imprimir-comanda"
+                            title="Imprimir comanda"
+                            aria-label="Imprimir comanda"
+                            onClick={() =>
+                              imprimirComanda(
+                                itemsCocinaAComanda(
+                                  grupo.mesaNombre,
+                                  grupo.comandaId,
+                                  grupo.items,
+                                  estacionActual?.nombre
+                                ),
+                                estacionActual?.anchoPapelComandaMm ?? 80
+                              )
+                            }
+                          >
+                            <i className="ti ti-printer" aria-hidden="true"></i>
+                          </button>
                         </span>
                       </div>
                       {grupo.items.map((item) => (

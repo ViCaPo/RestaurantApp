@@ -158,13 +158,21 @@ public class ComandaService
         int cajeroId,
         decimal? montoRecibido = null,
         decimal? montoEfectivo = null,
-        decimal? montoTarjeta = null)
+        decimal? montoTarjeta = null,
+        string? referenciaTransaccion = null,
+        string? autorizacionTarjeta = null,
+        string? ultimosDigitosTarjeta = null)
     {
         var comanda = await ObtenerComandaAsync(comandaId) ?? throw new Exception("Comanda no encontrada.");
         if (comanda.Estado != EstadoComanda.Abierta) throw new Exception("La comanda ya fue cobrada o cancelada.");
+
+        // Cada cobro debe registrarse dentro de un turno de caja abierto (para el corte).
+        var turno = await _db.TurnosCaja.FirstOrDefaultAsync(t => t.CajeroId == cajeroId && t.Cierre == null)
+            ?? throw new Exception("Debes abrir la caja antes de cobrar.");
+
         var total = comanda.Total;
         var aPagar = total + propina;
-        var pago = new Pago { ComandaId = comandaId, Monto = total, Propina = propina, Metodo = metodo, CajeroId = cajeroId };
+        var pago = new Pago { ComandaId = comandaId, Monto = total, Propina = propina, Metodo = metodo, CajeroId = cajeroId, TurnoCajaId = turno.Id };
 
         if (metodo == MetodoPago.Efectivo && montoRecibido.HasValue)
         {
@@ -188,6 +196,19 @@ public class ComandaService
         {
             pago.MontoTarjeta = aPagar;
         }
+
+        // Sin integración con TPV: se exige la referencia del comprobante para trazabilidad
+        // cuando la transacción es electrónica (tarjeta, transferencia, o la parte con tarjeta de un pago mixto).
+        var usaTarjetaOTransferencia =
+            metodo == MetodoPago.Tarjeta ||
+            metodo == MetodoPago.Transferencia ||
+            (metodo == MetodoPago.Mixto && (montoTarjeta ?? 0) > 0);
+        if (usaTarjetaOTransferencia && string.IsNullOrWhiteSpace(referenciaTransaccion))
+            throw new Exception("Captura la referencia de la transacción para dejar trazabilidad del pago.");
+
+        pago.ReferenciaTransaccion = string.IsNullOrWhiteSpace(referenciaTransaccion) ? null : referenciaTransaccion.Trim();
+        pago.AutorizacionTarjeta = string.IsNullOrWhiteSpace(autorizacionTarjeta) ? null : autorizacionTarjeta.Trim();
+        pago.UltimosDigitosTarjeta = string.IsNullOrWhiteSpace(ultimosDigitosTarjeta) ? null : ultimosDigitosTarjeta.Trim();
 
         _db.Pagos.Add(pago);
         comanda.Estado = EstadoComanda.Cobrada;

@@ -22,6 +22,7 @@ public class AppDbContext : DbContext, IAppDbContext
     public DbSet<ComandaItemExtra> ComandaItemExtras => Set<ComandaItemExtra>();
     public DbSet<Estacion> Estaciones => Set<Estacion>();
     public DbSet<SesionToken> SesionTokens => Set<SesionToken>();
+    public DbSet<ConfigTicket> ConfigsTicket => Set<ConfigTicket>();
 
     protected override void OnModelCreating(ModelBuilder mb)
     {
@@ -60,6 +61,8 @@ public class AppDbContext : DbContext, IAppDbContext
             .HasForeignKey(c => c.MeseroId).OnDelete(DeleteBehavior.Restrict);
         mb.Entity<Pago>().HasOne(p => p.Comanda).WithMany()
             .HasForeignKey(p => p.ComandaId).OnDelete(DeleteBehavior.Restrict);
+        mb.Entity<Pago>().HasOne(p => p.TurnoCaja).WithMany()
+            .HasForeignKey(p => p.TurnoCajaId).OnDelete(DeleteBehavior.Restrict);
         mb.Entity<Mesa>().HasOne(m => m.MeseroAsignado).WithMany()
             .HasForeignKey(m => m.MeseroAsignadoId).OnDelete(DeleteBehavior.SetNull);
 
@@ -80,6 +83,7 @@ public class AppDbContext : DbContext, IAppDbContext
         });
 
         mb.Entity<TemaVisual>().HasData(new TemaVisual { Id = 1 });
+        mb.Entity<ConfigTicket>().HasData(new ConfigTicket { Id = 1 });
 
         base.OnModelCreating(mb);
     }

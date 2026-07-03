@@ -17,13 +17,17 @@ public class ProductosController : ControllerBase
     public ProductosController(IAppDbContext db) => _db = db;
 
     [HttpGet]
-    public async Task<IActionResult> Listar([FromQuery] string? buscar, [FromQuery] int? categoriaId, [FromQuery] bool? disponible)
+    public async Task<IActionResult> Listar([FromQuery] string? buscar, [FromQuery] int? categoriaId, [FromQuery] bool? disponible, [FromQuery] string? estado)
     {
-        var query = _db.Productos.Where(p => p.Activo)
+        var query = _db.Productos
             .Include(p => p.Categoria)
             .Include(p => p.Estacion)
             .Include(p => p.ExtrasDisponibles)
             .AsQueryable();
+
+        // estado: "activos" (por defecto) | "inactivos" | "todos"
+        if (estado == "inactivos") query = query.Where(p => !p.Activo);
+        else if (estado != "todos") query = query.Where(p => p.Activo);
 
         if (!string.IsNullOrWhiteSpace(buscar))
             query = query.Where(p => p.Nombre.Contains(buscar) || (p.Sku != null && p.Sku.Contains(buscar)));
@@ -90,5 +94,16 @@ public class ProductosController : ControllerBase
         p.Activo = false;
         await _db.SaveChangesAsync();
         return Ok(new { mensaje = "Producto desactivado." });
+    }
+
+    [HttpPut("{id}/reactivar")]
+    [Authorize(Roles = "Administrador")]
+    public async Task<IActionResult> Reactivar(int id)
+    {
+        var p = await _db.Productos.FindAsync(id);
+        if (p == null) return NotFound(new { error = "Producto no encontrado." });
+        p.Activo = true;
+        await _db.SaveChangesAsync();
+        return Ok(new { mensaje = "Producto reactivado." });
     }
 }

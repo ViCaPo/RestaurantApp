@@ -5,6 +5,7 @@ import Modal from "../components/Modal";
 import SelectorExtras from "../components/SelectorExtras";
 import Badge from "../components/Badge";
 import { useToast } from "../components/Toast";
+import { useConfirmacion } from "../components/Confirmacion";
 import EnlaceAdmin from "../components/EnlaceAdmin";
 import { useSesion } from "../contexts/SesionContext";
 import { obtenerConexionComandas } from "../signalr";
@@ -21,6 +22,7 @@ export default function Comanda() {
   const { id } = useParams();
   const comandaId = Number(id);
   const toast = useToast();
+  const { pedirTexto } = useConfirmacion();
   const navigate = useNavigate();
   const { cerrarSesion } = useSesion();
 
@@ -115,7 +117,14 @@ export default function Comanda() {
   }
 
   async function cancelar(itemId: number) {
-    const motivo = window.prompt("Motivo de cancelación:");
+    const motivo = await pedirTexto({
+      titulo: "Cancelar producto",
+      mensaje: "Indica el motivo de la cancelación.",
+      etiqueta: "Motivo",
+      placeholder: "Ej: el cliente cambió de opinión",
+      textoConfirmar: "Cancelar producto",
+      requerido: true,
+    });
     if (!motivo) return;
     try {
       await api.comandas.cancelarItem(itemId, motivo);

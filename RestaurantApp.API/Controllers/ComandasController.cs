@@ -10,7 +10,10 @@ public record AgregarItemDto(int ProductoId, int Cantidad, string? Notas, List<i
 public record CancelarItemDto(string Motivo);
 public record EstadoItemDto(EstadoItem Estado);
 public record DescuentoDto(decimal Descuento);
-public record CobrarDto(MetodoPago Metodo, decimal Propina, int CajeroId, decimal? MontoRecibido, decimal? MontoEfectivo, decimal? MontoTarjeta);
+public record CobrarDto(
+    MetodoPago Metodo, decimal Propina, int CajeroId,
+    decimal? MontoRecibido, decimal? MontoEfectivo, decimal? MontoTarjeta,
+    string? ReferenciaTransaccion, string? AutorizacionTarjeta, string? UltimosDigitosTarjeta);
 public record CambiarMesaDto(int NuevaMesaId);
 public record UnirMesasDto(int ComandaOrigenId);
 
@@ -86,7 +89,8 @@ public class ComandasController : ControllerBase
         try
         {
             return Ok(await _comandas.CobrarAsync(
-                id, dto.Metodo, dto.Propina, dto.CajeroId, dto.MontoRecibido, dto.MontoEfectivo, dto.MontoTarjeta));
+                id, dto.Metodo, dto.Propina, dto.CajeroId, dto.MontoRecibido, dto.MontoEfectivo, dto.MontoTarjeta,
+                dto.ReferenciaTransaccion, dto.AutorizacionTarjeta, dto.UltimosDigitosTarjeta));
         }
         catch (Exception ex) { return BadRequest(new { error = ex.Message }); }
     }

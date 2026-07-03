@@ -1,7 +1,16 @@
 import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api, type Categoria, type Estacion, type Extra, type Mesa, type Producto, type Rol, type TemaVisual, type Usuario } from "../api";
+import { api, type Categoria, type ConfigTicket, type Estacion, type Extra, type Mesa, type Producto, type Rol, type TemaVisual, type Transaccion, type Usuario } from "../api";
+import {
+  construirComandaHtml,
+  construirTicketHtml,
+  estilosTicket,
+  imprimirComanda,
+  type DatosComanda,
+  type DatosTicket,
+} from "../ticket";
 import { useToast, mensajeDeError } from "../components/Toast";
+import { useConfirmacion } from "../components/Confirmacion";
 import { useSesion } from "../contexts/SesionContext";
 import { useTema } from "../contexts/TemaContext";
 import { aplicarTema } from "../tema";
@@ -12,8 +21,8 @@ import SelectorExtras from "../components/SelectorExtras";
 
 const ROLES: Rol[] = ["Administrador", "Cajero", "Mesero", "Cocinero"];
 
-const ITEMS_NAV = ["Mesas", "Categorías", "Productos", "Extras", "Estaciones", "Usuarios"] as const;
-const ITEMS_CONFIGURACION = ["Apariencia"] as const;
+const ITEMS_NAV = ["Mesas", "Categorías", "Productos", "Extras", "Estaciones", "Usuarios", "Transacciones"] as const;
+const ITEMS_CONFIGURACION = ["Apariencia", "Ticket", "Impresión"] as const;
 type Tab = (typeof ITEMS_NAV)[number] | (typeof ITEMS_CONFIGURACION)[number];
 
 const ICONOS: Record<Tab, string> = {
@@ -23,8 +32,36 @@ const ICONOS: Record<Tab, string> = {
   Extras: "ti-stack-2",
   Estaciones: "ti-chef-hat",
   Usuarios: "ti-users",
+  Transacciones: "ti-receipt",
   Apariencia: "ti-palette",
+  Ticket: "ti-printer",
+  Impresión: "ti-printer",
 };
+
+/** Botón de acción compacto con icono y tooltip, para las columnas "Acciones". */
+function AccionIcono({
+  icono,
+  etiqueta,
+  onClick,
+  peligro,
+}: {
+  icono: string;
+  etiqueta: string;
+  onClick: () => void;
+  peligro?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      className={`boton-icono ${peligro ? "boton-icono-peligro" : ""}`}
+      onClick={onClick}
+      title={etiqueta}
+      aria-label={etiqueta}
+    >
+      <i className={`ti ${icono}`} aria-hidden="true"></i>
+    </button>
+  );
+}
 
 export default function Administracion() {
   const { cerrarSesion } = useSesion();
@@ -44,7 +81,7 @@ export default function Administracion() {
       const [m, c, p, ex, est, u] = await Promise.all([
         api.mesas.listar(),
         api.categorias.listar(),
-        api.productos.listar(),
+        api.productos.listar({ estado: "todos" }),
         api.extras.listar(),
         api.estaciones.listar(),
         api.usuarios.listar(),
@@ -75,7 +112,7 @@ export default function Administracion() {
   }
 
   const mesasOcupadas = mesas.filter((m) => m.estado !== "Libre").length;
-  const productosAgotados = productos.filter((p) => !p.disponible).length;
+  const productosAgotados = productos.filter((p) => p.activo && !p.disponible).length;
 
   return (
     <div className="admin-shell">
@@ -166,7 +203,10 @@ export default function Administracion() {
         {tab === "Extras" && <SeccionExtras extras={extras} onCambio={recargarTodo} />}
         {tab === "Estaciones" && <SeccionEstaciones estaciones={estaciones} onCambio={recargarTodo} />}
         {tab === "Usuarios" && <SeccionUsuarios usuarios={usuarios} onCambio={recargarTodo} />}
+        {tab === "Transacciones" && <SeccionTransacciones />}
         {tab === "Apariencia" && <SeccionApariencia />}
+        {tab === "Ticket" && <SeccionTicket />}
+        {tab === "Impresión" && <SeccionImpresionEstaciones estaciones={estaciones} onCambio={recargarTodo} />}
       </main>
     </div>
   );
@@ -334,6 +374,7 @@ function SeccionMesas({ mesas, usuarios, onCambio }: { mesas: Mesa[]; usuarios: 
 
 function SeccionCategorias({ categorias, onCambio }: { categorias: Categoria[]; onCambio: () => void }) {
   const toast = useToast();
+  const { confirmar } = useConfirmacion();
   const [modalAbierto, setModalAbierto] = useState(false);
   const [editando, setEditando] = useState<Categoria | null>(null);
   const [nombre, setNombre] = useState("");
@@ -371,7 +412,13 @@ function SeccionCategorias({ categorias, onCambio }: { categorias: Categoria[]; 
   }
 
   async function desactivar(c: Categoria) {
-    if (!window.confirm(`¿Desactivar "${c.nombre}"?`)) return;
+    const ok = await confirmar({
+      titulo: "Desactivar categoría",
+      mensaje: `¿Seguro que quieres desactivar "${c.nombre}"? Dejará de estar disponible en el menú.`,
+      textoConfirmar: "Desactivar",
+      peligro: true,
+    });
+    if (!ok) return;
     try {
       await api.categorias.desactivar(c.id);
       toast.exito("Categoría desactivada.");
@@ -394,7 +441,7 @@ function SeccionCategorias({ categorias, onCambio }: { categorias: Categoria[]; 
           <tr>
             <th>Nombre</th>
             <th>Orden</th>
-            <th></th>
+            <th className="col-acciones">Acciones</th>
           </tr>
         </thead>
         <tbody>
@@ -402,13 +449,9 @@ function SeccionCategorias({ categorias, onCambio }: { categorias: Categoria[]; 
             <tr key={c.id}>
               <td>{c.nombre}</td>
               <td>{c.orden}</td>
-              <td>
-                <button className="boton-secundario" onClick={() => abrirEditar(c)}>
-                  Editar
-                </button>
-                <button className="boton-peligro" onClick={() => desactivar(c)}>
-                  Desactivar
-                </button>
+              <td className="acciones-tabla">
+                <AccionIcono icono="ti-pencil" etiqueta="Editar" onClick={() => abrirEditar(c)} />
+                <AccionIcono icono="ti-trash" etiqueta="Desactivar" peligro onClick={() => desactivar(c)} />
               </td>
             </tr>
           ))}
@@ -462,6 +505,7 @@ function SeccionProductos({
   onCambio: () => void;
 }) {
   const toast = useToast();
+  const { confirmar } = useConfirmacion();
   const [modalAbierto, setModalAbierto] = useState(false);
   const [editando, setEditando] = useState<Producto | null>(null);
   const [nombre, setNombre] = useState("");
@@ -473,6 +517,7 @@ function SeccionProductos({
 
   const [busqueda, setBusqueda] = useState("");
   const [filtroCategoria, setFiltroCategoria] = useState<number | "">("");
+  const [filtroEstado, setFiltroEstado] = useState<"activos" | "inactivos" | "todos">("activos");
 
   const productosFiltrados = productos.filter((p) => {
     const coincideBusqueda =
@@ -480,7 +525,9 @@ function SeccionProductos({
       p.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
       (p.sku ?? "").toLowerCase().includes(busqueda.toLowerCase());
     const coincideCategoria = filtroCategoria === "" || p.categoriaId === filtroCategoria;
-    return coincideBusqueda && coincideCategoria;
+    const coincideEstado =
+      filtroEstado === "todos" || (filtroEstado === "activos" ? p.activo : !p.activo);
+    return coincideBusqueda && coincideCategoria && coincideEstado;
   });
 
   function abrirCrear() {
@@ -552,6 +599,15 @@ function SeccionProductos({
   }
 
   async function toggleDisponibilidad(p: Producto) {
+    if (p.disponible) {
+      const ok = await confirmar({
+        titulo: "Marcar como agotado",
+        mensaje: `¿Marcar "${p.nombre}" como agotado? No se podrá pedir hasta que lo marques disponible de nuevo.`,
+        textoConfirmar: "Marcar agotado",
+        peligro: true,
+      });
+      if (!ok) return;
+    }
     try {
       await api.productos.cambiarDisponibilidad(p.id, !p.disponible);
       toast.exito(p.disponible ? "Marcado como agotado." : "Marcado como disponible.");
@@ -562,10 +618,26 @@ function SeccionProductos({
   }
 
   async function desactivar(p: Producto) {
-    if (!window.confirm(`¿Desactivar "${p.nombre}"?`)) return;
+    const ok = await confirmar({
+      titulo: "Desactivar producto",
+      mensaje: `¿Seguro que quieres desactivar "${p.nombre}"? Dejará de estar disponible en el menú.`,
+      textoConfirmar: "Desactivar",
+      peligro: true,
+    });
+    if (!ok) return;
     try {
       await api.productos.desactivar(p.id);
       toast.exito("Producto desactivado.");
+      onCambio();
+    } catch (err) {
+      toast.error(mensajeDeError(err));
+    }
+  }
+
+  async function reactivar(p: Producto) {
+    try {
+      await api.productos.reactivar(p.id);
+      toast.exito("Producto reactivado.");
       onCambio();
     } catch (err) {
       toast.error(mensajeDeError(err));
@@ -592,6 +664,14 @@ function SeccionProductos({
               </option>
             ))}
           </select>
+          <select
+            value={filtroEstado}
+            onChange={(e) => setFiltroEstado(e.target.value as "activos" | "inactivos" | "todos")}
+          >
+            <option value="activos">Activos</option>
+            <option value="inactivos">Desactivados</option>
+            <option value="todos">Todos</option>
+          </select>
         </div>
         <button className="boton-primario" onClick={abrirCrear} disabled={categorias.length === 0}>
           + Nuevo producto
@@ -609,7 +689,7 @@ function SeccionProductos({
             <th>Estación</th>
             <th>Extras</th>
             <th>Disponibilidad</th>
-            <th></th>
+            <th className="col-acciones">Acciones</th>
           </tr>
         </thead>
         <tbody>
@@ -622,18 +702,26 @@ function SeccionProductos({
               <td>{p.estacion?.nombre ?? "—"}</td>
               <td>{p.extrasDisponibles.length > 0 ? p.extrasDisponibles.map((e) => e.nombre).join(", ") : "—"}</td>
               <td>
-                <Badge texto={p.disponible ? "Disponible" : "Agotado"} tono={p.disponible ? "verde" : "gris"} />
+                {!p.activo ? (
+                  <Badge texto="Desactivado" tono="rojo" />
+                ) : (
+                  <Badge texto={p.disponible ? "Disponible" : "Agotado"} tono={p.disponible ? "verde" : "gris"} />
+                )}
               </td>
-              <td>
-                <button className="boton-secundario" onClick={() => abrirEditar(p)}>
-                  Editar
-                </button>
-                <button className="boton-secundario" onClick={() => toggleDisponibilidad(p)}>
-                  {p.disponible ? "Marcar agotado" : "Marcar disponible"}
-                </button>
-                <button className="boton-peligro" onClick={() => desactivar(p)}>
-                  Desactivar
-                </button>
+              <td className="acciones-tabla">
+                {p.activo ? (
+                  <>
+                    <AccionIcono icono="ti-pencil" etiqueta="Editar" onClick={() => abrirEditar(p)} />
+                    <AccionIcono
+                      icono={p.disponible ? "ti-eye-off" : "ti-eye"}
+                      etiqueta={p.disponible ? "Marcar agotado" : "Marcar disponible"}
+                      onClick={() => toggleDisponibilidad(p)}
+                    />
+                    <AccionIcono icono="ti-trash" etiqueta="Desactivar" peligro onClick={() => desactivar(p)} />
+                  </>
+                ) : (
+                  <AccionIcono icono="ti-refresh" etiqueta="Reactivar" onClick={() => reactivar(p)} />
+                )}
               </td>
             </tr>
           ))}
@@ -720,6 +808,7 @@ function SeccionProductos({
 
 function SeccionExtras({ extras, onCambio }: { extras: Extra[]; onCambio: () => void }) {
   const toast = useToast();
+  const { confirmar } = useConfirmacion();
   const [modalAbierto, setModalAbierto] = useState(false);
   const [editando, setEditando] = useState<Extra | null>(null);
   const [nombre, setNombre] = useState("");
@@ -757,7 +846,13 @@ function SeccionExtras({ extras, onCambio }: { extras: Extra[]; onCambio: () => 
   }
 
   async function desactivar(ex: Extra) {
-    if (!window.confirm(`¿Desactivar "${ex.nombre}"?`)) return;
+    const ok = await confirmar({
+      titulo: "Desactivar extra",
+      mensaje: `¿Seguro que quieres desactivar "${ex.nombre}"?`,
+      textoConfirmar: "Desactivar",
+      peligro: true,
+    });
+    if (!ok) return;
     try {
       await api.extras.desactivar(ex.id);
       toast.exito("Extra desactivado.");
@@ -784,7 +879,7 @@ function SeccionExtras({ extras, onCambio }: { extras: Extra[]; onCambio: () => 
           <tr>
             <th>Nombre</th>
             <th>Precio adicional</th>
-            <th></th>
+            <th className="col-acciones">Acciones</th>
           </tr>
         </thead>
         <tbody>
@@ -792,13 +887,9 @@ function SeccionExtras({ extras, onCambio }: { extras: Extra[]; onCambio: () => 
             <tr key={ex.id}>
               <td>{ex.nombre}</td>
               <td>${ex.precioAdicional.toFixed(2)}</td>
-              <td>
-                <button className="boton-secundario" onClick={() => abrirEditar(ex)}>
-                  Editar
-                </button>
-                <button className="boton-peligro" onClick={() => desactivar(ex)}>
-                  Desactivar
-                </button>
+              <td className="acciones-tabla">
+                <AccionIcono icono="ti-pencil" etiqueta="Editar" onClick={() => abrirEditar(ex)} />
+                <AccionIcono icono="ti-trash" etiqueta="Desactivar" peligro onClick={() => desactivar(ex)} />
               </td>
             </tr>
           ))}
@@ -847,6 +938,7 @@ function SeccionExtras({ extras, onCambio }: { extras: Extra[]; onCambio: () => 
 
 function SeccionEstaciones({ estaciones, onCambio }: { estaciones: Estacion[]; onCambio: () => void }) {
   const toast = useToast();
+  const { confirmar } = useConfirmacion();
   const [modalAbierto, setModalAbierto] = useState(false);
   const [editando, setEditando] = useState<Estacion | null>(null);
   const [nombre, setNombre] = useState("");
@@ -881,7 +973,13 @@ function SeccionEstaciones({ estaciones, onCambio }: { estaciones: Estacion[]; o
   }
 
   async function desactivar(est: Estacion) {
-    if (!window.confirm(`¿Desactivar "${est.nombre}"?`)) return;
+    const ok = await confirmar({
+      titulo: "Desactivar estación",
+      mensaje: `¿Seguro que quieres desactivar "${est.nombre}"?`,
+      textoConfirmar: "Desactivar",
+      peligro: true,
+    });
+    if (!ok) return;
     try {
       await api.estaciones.desactivar(est.id);
       toast.exito("Estación desactivada.");
@@ -908,20 +1006,16 @@ function SeccionEstaciones({ estaciones, onCambio }: { estaciones: Estacion[]; o
         <thead>
           <tr>
             <th>Nombre</th>
-            <th></th>
+            <th className="col-acciones">Acciones</th>
           </tr>
         </thead>
         <tbody>
           {estaciones.map((est) => (
             <tr key={est.id}>
               <td>{est.nombre}</td>
-              <td>
-                <button className="boton-secundario" onClick={() => abrirEditar(est)}>
-                  Editar
-                </button>
-                <button className="boton-peligro" onClick={() => desactivar(est)}>
-                  Desactivar
-                </button>
+              <td className="acciones-tabla">
+                <AccionIcono icono="ti-pencil" etiqueta="Editar" onClick={() => abrirEditar(est)} />
+                <AccionIcono icono="ti-trash" etiqueta="Desactivar" peligro onClick={() => desactivar(est)} />
               </td>
             </tr>
           ))}
@@ -970,6 +1064,7 @@ function badgeRol(rol: Rol) {
 
 function SeccionUsuarios({ usuarios, onCambio }: { usuarios: Usuario[]; onCambio: () => void }) {
   const toast = useToast();
+  const { confirmar } = useConfirmacion();
   const [modalAbierto, setModalAbierto] = useState(false);
   const [nombre, setNombre] = useState("");
   const [pin, setPin] = useState("");
@@ -995,7 +1090,13 @@ function SeccionUsuarios({ usuarios, onCambio }: { usuarios: Usuario[]; onCambio
   }
 
   async function desactivar(u: Usuario) {
-    if (!window.confirm(`¿Desactivar a "${u.nombre}"?`)) return;
+    const ok = await confirmar({
+      titulo: "Desactivar usuario",
+      mensaje: `¿Seguro que quieres desactivar a "${u.nombre}"? Se cerrarán sus sesiones activas.`,
+      textoConfirmar: "Desactivar",
+      peligro: true,
+    });
+    if (!ok) return;
     try {
       await api.usuarios.desactivar(u.id);
       toast.exito("Usuario desactivado.");
@@ -1019,7 +1120,7 @@ function SeccionUsuarios({ usuarios, onCambio }: { usuarios: Usuario[]; onCambio
             <th>Nombre</th>
             <th>PIN</th>
             <th>Rol</th>
-            <th></th>
+            <th className="col-acciones">Acciones</th>
           </tr>
         </thead>
         <tbody>
@@ -1028,10 +1129,8 @@ function SeccionUsuarios({ usuarios, onCambio }: { usuarios: Usuario[]; onCambio
               <td>{u.nombre}</td>
               <td title="El PIN se guarda cifrado y no se puede consultar">••••</td>
               <td>{badgeRol(u.rol)}</td>
-              <td>
-                <button className="boton-peligro" onClick={() => desactivar(u)}>
-                  Desactivar
-                </button>
+              <td className="acciones-tabla">
+                <AccionIcono icono="ti-trash" etiqueta="Desactivar" peligro onClick={() => desactivar(u)} />
               </td>
             </tr>
           ))}
@@ -1081,25 +1180,450 @@ function SeccionUsuarios({ usuarios, onCambio }: { usuarios: Usuario[]; onCambio
   );
 }
 
+function SeccionTransacciones() {
+  const toast = useToast();
+  const [pagos, setPagos] = useState<Transaccion[]>([]);
+  const [dias, setDias] = useState<number | "">(7);
+  const [cargando, setCargando] = useState(true);
+
+  useEffect(() => {
+    let vigente = true;
+    setCargando(true);
+    api.pagos
+      .listar(dias === "" ? undefined : dias)
+      .then((data) => vigente && setPagos(data))
+      .catch((e) => vigente && toast.error(mensajeDeError(e)))
+      .finally(() => vigente && setCargando(false));
+    return () => {
+      vigente = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dias]);
+
+  const totalCobrado = pagos.reduce((s, p) => s + p.total, 0);
+  const totalPropinas = pagos.reduce((s, p) => s + p.propina, 0);
+
+  return (
+    <section>
+      <div className="seccion-header seccion-header-solo-accion">
+        <select value={dias} onChange={(e) => setDias(e.target.value === "" ? "" : Number(e.target.value))}>
+          <option value={1}>Hoy</option>
+          <option value={7}>Últimos 7 días</option>
+          <option value={30}>Últimos 30 días</option>
+          <option value="">Todo</option>
+        </select>
+      </div>
+
+      <div className="grid-resumen">
+        <div className="tarjeta-resumen">
+          <p className="tarjeta-resumen-etiqueta">Transacciones</p>
+          <p className="tarjeta-resumen-valor">{pagos.length}</p>
+        </div>
+        <div className="tarjeta-resumen">
+          <p className="tarjeta-resumen-etiqueta">Total cobrado</p>
+          <p className="tarjeta-resumen-valor">${totalCobrado.toFixed(2)}</p>
+        </div>
+        <div className="tarjeta-resumen">
+          <p className="tarjeta-resumen-etiqueta">Propinas</p>
+          <p className="tarjeta-resumen-valor">${totalPropinas.toFixed(2)}</p>
+        </div>
+      </div>
+
+      <table className="tabla-admin">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Mesa</th>
+            <th>Método</th>
+            <th>Total</th>
+            <th>Referencia</th>
+            <th>Cajero</th>
+          </tr>
+        </thead>
+        <tbody>
+          {pagos.map((p) => (
+            <tr key={p.id}>
+              <td>{new Date(p.fecha).toLocaleString()}</td>
+              <td>{p.mesa ?? "—"}</td>
+              <td>{p.metodo}</td>
+              <td>${p.total.toFixed(2)}</td>
+              <td>
+                {p.referencia ? (
+                  <span title={[p.autorizacion && `Aut: ${p.autorizacion}`].filter(Boolean).join("")}>
+                    {p.referencia}
+                    {p.ultimosDigitos ? ` ····${p.ultimosDigitos}` : ""}
+                  </span>
+                ) : (
+                  "—"
+                )}
+              </td>
+              <td>{p.cajero ?? "—"}</td>
+            </tr>
+          ))}
+          {!cargando && pagos.length === 0 && (
+            <tr>
+              <td colSpan={6} className="celda-vacia">
+                No hay transacciones en el periodo.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
+const TICKET_MUESTRA: DatosTicket = {
+  mesa: "5",
+  comandaId: 1042,
+  fecha: new Date(),
+  cajero: "Laura",
+  mesero: "Ana",
+  items: [
+    { cantidad: 2, nombre: "Tacos Pastor", importe: 50 },
+    { cantidad: 1, nombre: "Limonada", importe: 30 },
+    { cantidad: 1, nombre: "Agua", importe: 20 },
+  ],
+  subtotal: 100,
+  descuento: 0,
+  propina: 15,
+  total: 115,
+  metodo: "Tarjeta",
+  montoRecibido: null,
+  cambio: null,
+  referencia: "VCH-889231",
+  autorizacion: "AUTH-4455",
+  ultimosDigitos: "4321",
+};
+
+function SeccionTicket() {
+  const toast = useToast();
+  const { tema } = useTema();
+  const [config, setConfig] = useState<ConfigTicket | null>(null);
+  const [guardando, setGuardando] = useState(false);
+  const [subiendoLogo, setSubiendoLogo] = useState(false);
+
+  useEffect(() => {
+    api.ticket.obtener().then(setConfig).catch((e) => toast.error(mensajeDeError(e)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function set<K extends keyof ConfigTicket>(campo: K, valor: ConfigTicket[K]) {
+    setConfig((c) => (c ? { ...c, [campo]: valor } : c));
+  }
+
+  async function guardar() {
+    if (!config) return;
+    setGuardando(true);
+    try {
+      await api.ticket.actualizar(config);
+      toast.exito("Configuración del ticket guardada.");
+    } catch (e) {
+      toast.error(mensajeDeError(e));
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  async function subirLogoTicket(e: ChangeEvent<HTMLInputElement>) {
+    const archivo = e.target.files?.[0];
+    if (!archivo) return;
+    setSubiendoLogo(true);
+    try {
+      const { logoUrl } = await api.ticket.subirLogo(archivo);
+      setConfig((c) => (c ? { ...c, logoUrl } : c));
+      toast.exito("Logo del ticket actualizado.");
+    } catch (err) {
+      toast.error(mensajeDeError(err));
+    } finally {
+      setSubiendoLogo(false);
+      e.target.value = "";
+    }
+  }
+
+  if (!config) return <p>Cargando...</p>;
+
+  const previewHtml = tema
+    ? `<style>${estilosTicket(config.anchoPapelMm)}</style><div class="t-doc">${construirTicketHtml(
+        TICKET_MUESTRA,
+        config,
+        tema
+      )}</div>`
+    : "";
+
+  return (
+    <section className="config-ticket">
+      <div className="config-ticket-form">
+        <p className="aviso">
+          Este es el ticket que se imprime al cerrar el cobro. El nombre del negocio se toma de Apariencia; el logo
+          del ticket es independiente (puede ser distinto al de la app, por ejemplo uno en blanco y negro para
+          impresora térmica).
+        </p>
+
+        <div className="bloque-logo">
+          <div className="logo-preview">
+            {config.logoUrl ? <img src={config.logoUrl} alt="Logo del ticket" /> : <span>Sin logo</span>}
+          </div>
+          <div>
+            <label className="toggle-config">
+              <input
+                type="checkbox"
+                checked={config.mostrarLogo}
+                onChange={(e) => set("mostrarLogo", e.target.checked)}
+              />
+              Mostrar logo en el ticket
+            </label>
+            <label className="boton-secundario boton-subir-logo">
+              {subiendoLogo ? "Subiendo..." : "Subir logo del ticket"}
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                onChange={subirLogoTicket}
+                hidden
+              />
+            </label>
+          </div>
+        </div>
+
+        <label>
+          Dirección
+          <input value={config.direccion} onChange={(e) => set("direccion", e.target.value)} placeholder="Calle y número" />
+        </label>
+        <label>
+          Teléfono
+          <input value={config.telefono} onChange={(e) => set("telefono", e.target.value)} placeholder="Tel." />
+        </label>
+        <label>
+          RFC / identificador fiscal
+          <input value={config.rfc} onChange={(e) => set("rfc", e.target.value)} placeholder="RFC" />
+        </label>
+
+        <label className="toggle-config">
+          <input
+            type="checkbox"
+            checked={config.mostrarMeseroCajero}
+            onChange={(e) => set("mostrarMeseroCajero", e.target.checked)}
+          />
+          Mostrar mesero y cajero
+        </label>
+        <label className="toggle-config">
+          <input type="checkbox" checked={config.mostrarPropina} onChange={(e) => set("mostrarPropina", e.target.checked)} />
+          Mostrar propina
+        </label>
+        <label className="toggle-config">
+          <input
+            type="checkbox"
+            checked={config.mostrarReferencia}
+            onChange={(e) => set("mostrarReferencia", e.target.checked)}
+          />
+          Mostrar referencia de la transacción
+        </label>
+
+        <label>
+          Mensaje de pie
+          <input value={config.mensajePie} onChange={(e) => set("mensajePie", e.target.value)} placeholder="Mensaje final" />
+        </label>
+
+        <label>
+          Ancho de papel
+          <select value={config.anchoPapelMm} onChange={(e) => set("anchoPapelMm", Number(e.target.value))}>
+            <option value={58}>58 mm</option>
+            <option value={80}>80 mm</option>
+          </select>
+        </label>
+
+        <label className="toggle-config">
+          <input
+            type="checkbox"
+            checked={config.imprimirAutomatico}
+            onChange={(e) => set("imprimirAutomatico", e.target.checked)}
+          />
+          Imprimir automáticamente al cobrar
+        </label>
+
+        <button className="boton-primario" onClick={guardar} disabled={guardando}>
+          {guardando ? "Guardando..." : "Guardar cambios"}
+        </button>
+      </div>
+
+      <div className="config-ticket-preview">
+        <p className="texto-tenue">Vista previa</p>
+        <div className="ticket-paper" dangerouslySetInnerHTML={{ __html: previewHtml }} />
+      </div>
+    </section>
+  );
+}
+
+const COMANDA_MUESTRA: DatosComanda = {
+  mesa: "5",
+  comandaId: 1042,
+  fecha: new Date(),
+  estacion: "Cocina caliente",
+  items: [
+    { cantidad: 2, nombre: "Tacos Pastor", numeroComensal: 1, notas: null, extras: ["Queso extra"] },
+    { cantidad: 1, nombre: "Sopa Azteca", numeroComensal: 2, notas: "Sin cilantro", extras: [] },
+  ],
+};
+
+function SeccionImpresionEstaciones({
+  estaciones,
+  onCambio,
+}: {
+  estaciones: Estacion[];
+  onCambio: () => void;
+}) {
+  const toast = useToast();
+  const [guardandoId, setGuardandoId] = useState<number | null>(null);
+  const [previaId, setPreviaId] = useState<number | null>(null);
+
+  async function actualizar(est: Estacion, cambios: Partial<Pick<Estacion, "imprimirComandaAutomatico" | "anchoPapelComandaMm">>) {
+    setGuardandoId(est.id);
+    try {
+      await api.estaciones.editarImpresion(
+        est.id,
+        cambios.imprimirComandaAutomatico ?? est.imprimirComandaAutomatico,
+        cambios.anchoPapelComandaMm ?? est.anchoPapelComandaMm
+      );
+      toast.exito(`Impresión de "${est.nombre}" actualizada.`);
+      onCambio();
+    } catch (err) {
+      toast.error(mensajeDeError(err));
+    } finally {
+      setGuardandoId(null);
+    }
+  }
+
+  function probarImpresion(est: Estacion) {
+    imprimirComanda({ ...COMANDA_MUESTRA, estacion: est.nombre }, est.anchoPapelComandaMm);
+  }
+
+  return (
+    <section>
+      <p className="aviso">
+        Cada estación de cocina (Barra, Cocina caliente, etc.) puede tener su propia impresora conectada al equipo
+        donde se muestra su pantalla de Cocina filtrada. Configura aquí si esa estación imprime la comanda
+        automáticamente al recibir un pedido nuevo, y el ancho de su papel.
+      </p>
+
+      <table className="tabla-admin">
+        <thead>
+          <tr>
+            <th>Estación</th>
+            <th>Imprimir automático</th>
+            <th>Ancho de papel</th>
+            <th className="col-acciones">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {estaciones.map((est) => (
+            <tr key={est.id}>
+              <td>{est.nombre}</td>
+              <td>
+                <label className="toggle-config">
+                  <input
+                    type="checkbox"
+                    checked={est.imprimirComandaAutomatico}
+                    disabled={guardandoId === est.id}
+                    onChange={(e) => actualizar(est, { imprimirComandaAutomatico: e.target.checked })}
+                  />
+                  {est.imprimirComandaAutomatico ? "Activo" : "Inactivo"}
+                </label>
+              </td>
+              <td>
+                <select
+                  value={est.anchoPapelComandaMm}
+                  disabled={guardandoId === est.id}
+                  onChange={(e) => actualizar(est, { anchoPapelComandaMm: Number(e.target.value) })}
+                >
+                  <option value={58}>58 mm</option>
+                  <option value={80}>80 mm</option>
+                </select>
+              </td>
+              <td className="acciones-tabla">
+                <AccionIcono icono="ti-printer" etiqueta="Ver comanda de muestra" onClick={() => setPreviaId(est.id)} />
+              </td>
+            </tr>
+          ))}
+          {estaciones.length === 0 && (
+            <tr>
+              <td colSpan={4} className="celda-vacia">
+                No hay estaciones todavía. Crea una en la sección Estaciones.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+
+      {previaId != null && (
+        <Modal
+          titulo={`Comanda de muestra — ${estaciones.find((e) => e.id === previaId)?.nombre ?? ""}`}
+          onClose={() => setPreviaId(null)}
+        >
+          {(() => {
+            const est = estaciones.find((e) => e.id === previaId);
+            if (!est) return null;
+            const html = `<style>${estilosTicket(est.anchoPapelComandaMm)}</style><div class="t-doc">${construirComandaHtml(
+              { ...COMANDA_MUESTRA, estacion: est.nombre }
+            )}</div>`;
+            return (
+              <>
+                <div className="ticket-paper" dangerouslySetInnerHTML={{ __html: html }} />
+                <div className="form-modal-acciones">
+                  <button className="boton-secundario" onClick={() => setPreviaId(null)}>
+                    Cerrar
+                  </button>
+                  <button className="boton-primario" onClick={() => probarImpresion(est)}>
+                    <i className="ti ti-printer" aria-hidden="true"></i> Imprimir de prueba
+                  </button>
+                </div>
+              </>
+            );
+          })()}
+        </Modal>
+      )}
+    </section>
+  );
+}
+
 type CampoColor = keyof Omit<TemaVisual, "id" | "logoUrl" | "nombreRestaurante">;
 
-const CAMPOS_TEMA: { campo: CampoColor; etiqueta: string }[] = [
-  { campo: "colorPrimario", etiqueta: "Primario" },
-  { campo: "colorPrimarioClaro", etiqueta: "Primario (claro)" },
-  { campo: "colorPrimarioOscuro", etiqueta: "Primario (oscuro)" },
-  { campo: "colorFondo", etiqueta: "Fondo" },
-  { campo: "colorSuperficie", etiqueta: "Superficie (tarjetas/tablas)" },
-  { campo: "colorBorde", etiqueta: "Bordes" },
-  { campo: "colorTexto", etiqueta: "Texto" },
-  { campo: "colorTextoTenue", etiqueta: "Texto secundario" },
-  { campo: "colorExito", etiqueta: "Éxito" },
-  { campo: "colorExitoClaro", etiqueta: "Éxito (claro)" },
-  { campo: "colorError", etiqueta: "Error" },
-  { campo: "colorErrorClaro", etiqueta: "Error (claro)" },
-  { campo: "colorAdvertencia", etiqueta: "Advertencia" },
-  { campo: "colorAdvertenciaClaro", etiqueta: "Advertencia (claro)" },
-  { campo: "colorInfo", etiqueta: "Información" },
-  { campo: "colorInfoClaro", etiqueta: "Información (claro)" },
+const GRUPOS_TEMA: { titulo: string; campos: { campo: CampoColor; etiqueta: string; descripcion: string }[] }[] = [
+  {
+    titulo: "Marca y acento",
+    campos: [
+      { campo: "colorPrimario", etiqueta: "Primario", descripcion: "Botones principales, enlaces activos y bordes al enfocar un campo." },
+      { campo: "colorPrimarioClaro", etiqueta: "Primario (claro)", descripcion: "Fondo de pestañas y chips activos (ej. \"Comensal 1\" seleccionado)." },
+      { campo: "colorPrimarioOscuro", etiqueta: "Primario (oscuro)", descripcion: "Color del botón principal al pasar el cursor (hover)." },
+    ],
+  },
+  {
+    titulo: "Superficies",
+    campos: [
+      { campo: "colorFondo", etiqueta: "Fondo", descripcion: "Fondo general detrás de todas las pantallas." },
+      { campo: "colorSuperficie", etiqueta: "Superficie", descripcion: "Fondo de tarjetas, tablas, modales y botones secundarios." },
+      { campo: "colorBorde", etiqueta: "Bordes", descripcion: "Líneas divisorias y bordes de tarjetas, tablas e inputs." },
+    ],
+  },
+  {
+    titulo: "Texto",
+    campos: [
+      { campo: "colorTexto", etiqueta: "Texto principal", descripcion: "Color del texto normal en toda la app." },
+      { campo: "colorTextoTenue", etiqueta: "Texto secundario", descripcion: "Etiquetas, ayudas y texto de menor énfasis." },
+    ],
+  },
+  {
+    titulo: "Estados",
+    campos: [
+      { campo: "colorExito", etiqueta: "Éxito", descripcion: "Texto de badges de éxito (ej. \"Disponible\", \"Cuadrado\")." },
+      { campo: "colorExitoClaro", etiqueta: "Éxito (fondo)", descripcion: "Fondo de esos mismos badges de éxito." },
+      { campo: "colorError", etiqueta: "Error", descripcion: "Texto de badges de error (ej. \"Agotado\", \"Faltante\")." },
+      { campo: "colorErrorClaro", etiqueta: "Error (fondo)", descripcion: "Fondo de esos mismos badges de error." },
+      { campo: "colorAdvertencia", etiqueta: "Advertencia", descripcion: "Texto de badges de advertencia (ej. \"Sobrante\")." },
+      { campo: "colorAdvertenciaClaro", etiqueta: "Advertencia (fondo)", descripcion: "Fondo de esos mismos badges de advertencia." },
+      { campo: "colorInfo", etiqueta: "Información", descripcion: "Texto de badges informativos (ej. estado \"Reservada\")." },
+      { campo: "colorInfoClaro", etiqueta: "Información (fondo)", descripcion: "Fondo de esos mismos badges informativos." },
+    ],
+  },
 ];
 
 function SeccionApariencia() {
@@ -1183,13 +1707,51 @@ function SeccionApariencia() {
         </div>
       </div>
 
-      <div className="grid-colores">
-        {CAMPOS_TEMA.map(({ campo, etiqueta }) => (
-          <label key={campo} className="campo-color">
-            <span>{etiqueta}</span>
-            <input type="color" value={tema[campo]} onChange={(e) => cambiarCampo(campo, e.target.value)} />
-          </label>
-        ))}
+      <div className="apariencia-layout">
+        <div className="apariencia-colores">
+          {GRUPOS_TEMA.map((grupo) => (
+            <div key={grupo.titulo} className="grupo-colores">
+              <h3 className="grupo-colores-titulo">{grupo.titulo}</h3>
+              <div className="grid-colores">
+                {grupo.campos.map(({ campo, etiqueta, descripcion }) => (
+                  <label key={campo} className="campo-color">
+                    <div className="campo-color-encabezado">
+                      <span>{etiqueta}</span>
+                      <input type="color" value={tema[campo]} onChange={(e) => cambiarCampo(campo, e.target.value)} />
+                    </div>
+                    <span className="campo-color-descripcion">{descripcion}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="apariencia-preview">
+          <p className="texto-tenue">Vista previa en vivo</p>
+          <div className="apariencia-preview-tarjeta">
+            <p className="apariencia-preview-texto">Texto principal de ejemplo</p>
+            <p className="texto-tenue">Texto secundario de ejemplo</p>
+            <div className="apariencia-preview-fila">
+              <button type="button" className="boton-primario">
+                Botón primario
+              </button>
+              <button type="button" className="boton-secundario">
+                Botón secundario
+              </button>
+            </div>
+            <div className="apariencia-preview-fila">
+              <Badge texto="Disponible" tono="verde" />
+              <Badge texto="Agotado" tono="rojo" />
+              <Badge texto="Sobrante" tono="amarillo" />
+              <Badge texto="Reservada" tono="azul" />
+            </div>
+            <div className="apariencia-preview-fila">
+              <span className="chip-comensal chip-comensal-activo">Comensal 1 (activo)</span>
+              <span className="chip-comensal">Comensal 2</span>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
   );

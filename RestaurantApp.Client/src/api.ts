@@ -25,6 +25,8 @@ export interface Estacion {
   id: number;
   nombre: string;
   activo: boolean;
+  imprimirComandaAutomatico: boolean;
+  anchoPapelComandaMm: number;
 }
 
 export interface Producto {
@@ -61,6 +63,72 @@ export interface Usuario {
 export interface RespuestaLogin {
   token: string;
   usuario: Usuario;
+}
+
+export interface ConfigTicket {
+  id: number;
+  mostrarLogo: boolean;
+  logoUrl?: string | null;
+  direccion: string;
+  telefono: string;
+  rfc: string;
+  mostrarMeseroCajero: boolean;
+  mostrarPropina: boolean;
+  mostrarReferencia: boolean;
+  mensajePie: string;
+  anchoPapelMm: number;
+  imprimirAutomatico: boolean;
+}
+
+export interface TurnoCaja {
+  id: number;
+  cajeroId: number;
+  apertura: string;
+  cierre?: string | null;
+  fondoInicial: number;
+  efectivoContado?: number | null;
+}
+
+export interface MetodoResumen {
+  metodo: string;
+  cantidad: number;
+  monto: number;
+}
+
+export interface ResumenTurno {
+  turnoId: number;
+  cajeroId: number;
+  cajeroNombre?: string | null;
+  apertura: string;
+  cierre?: string | null;
+  fondoInicial: number;
+  numTransacciones: number;
+  totalVentas: number;
+  totalPropinas: number;
+  porMetodo: MetodoResumen[];
+  ventasEfectivo: number;
+  efectivoEsperado: number;
+  efectivoContado?: number | null;
+  diferencia?: number | null;
+  estado?: string | null;
+}
+
+export interface Transaccion {
+  id: number;
+  fecha: string;
+  comandaId: number;
+  mesa?: string | null;
+  metodo: string;
+  monto: number;
+  propina: number;
+  total: number;
+  montoEfectivo?: number | null;
+  montoTarjeta?: number | null;
+  referencia?: string | null;
+  autorizacion?: string | null;
+  ultimosDigitos?: string | null;
+  cajero?: string | null;
+  turnoCajaId?: number | null;
 }
 
 export interface TemaVisual {
@@ -131,6 +199,7 @@ export interface Comanda {
   mesaId: number;
   mesa?: Mesa;
   meseroId: number;
+  mesero?: Usuario | null;
   numeroComensales: number;
   estado: EstadoComanda;
   items: ComandaItem[];
@@ -191,11 +260,17 @@ export const api = {
       }).then((r) => manejarRespuesta<Mesa>(r)),
   },
   productos: {
-    listar: (filtros?: { buscar?: string; categoriaId?: number; disponible?: boolean }) => {
+    listar: (filtros?: {
+      buscar?: string;
+      categoriaId?: number;
+      disponible?: boolean;
+      estado?: "activos" | "inactivos" | "todos";
+    }) => {
       const params = new URLSearchParams();
       if (filtros?.buscar) params.set("buscar", filtros.buscar);
       if (filtros?.categoriaId != null) params.set("categoriaId", String(filtros.categoriaId));
       if (filtros?.disponible != null) params.set("disponible", String(filtros.disponible));
+      if (filtros?.estado) params.set("estado", filtros.estado);
       const query = params.toString();
       return fetchApi(`/api/productos${query ? `?${query}` : ""}`).then((r) => manejarRespuesta<Producto[]>(r));
     },
@@ -223,6 +298,10 @@ export const api = {
       }).then((r) => manejarRespuesta<Producto>(r)),
     desactivar: (id: number) =>
       fetchApi(`/api/productos/${id}`, { method: "DELETE" }).then((r) =>
+        manejarRespuesta<{ mensaje: string }>(r)
+      ),
+    reactivar: (id: number) =>
+      fetchApi(`/api/productos/${id}/reactivar`, { method: "PUT" }).then((r) =>
         manejarRespuesta<{ mensaje: string }>(r)
       ),
   },
@@ -282,6 +361,12 @@ export const api = {
       fetchApi(`/api/estaciones/${id}`, { method: "DELETE" }).then((r) =>
         manejarRespuesta<{ mensaje: string }>(r)
       ),
+    editarImpresion: (id: number, imprimirComandaAutomatico: boolean, anchoPapelComandaMm: number) =>
+      fetchApi(`/api/estaciones/${id}/impresion`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imprimirComandaAutomatico, anchoPapelComandaMm }),
+      }).then((r) => manejarRespuesta<Estacion>(r)),
   },
   usuarios: {
     listar: () => fetchApi("/api/usuarios").then((r) => manejarRespuesta<Usuario[]>(r)),
@@ -371,12 +456,23 @@ export const api = {
       cajeroId: number,
       montoRecibido?: number,
       montoEfectivo?: number,
-      montoTarjeta?: number
+      montoTarjeta?: number,
+      transaccion?: { referencia?: string; autorizacion?: string; ultimosDigitos?: string }
     ) =>
       fetchApi(`/api/comandas/${comandaId}/cobrar`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ metodo, propina, cajeroId, montoRecibido, montoEfectivo, montoTarjeta }),
+        body: JSON.stringify({
+          metodo,
+          propina,
+          cajeroId,
+          montoRecibido,
+          montoEfectivo,
+          montoTarjeta,
+          referenciaTransaccion: transaccion?.referencia,
+          autorizacionTarjeta: transaccion?.autorizacion,
+          ultimosDigitosTarjeta: transaccion?.ultimosDigitos,
+        }),
       }).then((r) => manejarRespuesta<unknown>(r)),
     cambiarMesa: (comandaId: number, nuevaMesaId: number) =>
       fetchApi(`/api/comandas/${comandaId}/mesa`, {
@@ -390,5 +486,43 @@ export const api = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ comandaOrigenId }),
       }).then((r) => manejarRespuesta<Comanda>(r)),
+  },
+  caja: {
+    turnoAbierto: (cajeroId: number) =>
+      fetchApi(`/api/caja/abierto?cajeroId=${cajeroId}`).then((r) => manejarRespuesta<TurnoCaja | null>(r)),
+    abrir: (cajeroId: number, fondoInicial: number) =>
+      fetchApi("/api/caja/abrir", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cajeroId, fondoInicial }),
+      }).then((r) => manejarRespuesta<TurnoCaja>(r)),
+    resumen: (turnoId: number) =>
+      fetchApi(`/api/caja/${turnoId}/resumen`).then((r) => manejarRespuesta<ResumenTurno>(r)),
+    cerrar: (turnoId: number, efectivoContado: number) =>
+      fetchApi(`/api/caja/${turnoId}/cerrar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ efectivoContado }),
+      }).then((r) => manejarRespuesta<ResumenTurno>(r)),
+  },
+  pagos: {
+    listar: (dias?: number) =>
+      fetchApi(`/api/pagos${dias ? `?dias=${dias}` : ""}`).then((r) => manejarRespuesta<Transaccion[]>(r)),
+  },
+  ticket: {
+    obtener: () => fetchApi("/api/ticket").then((r) => manejarRespuesta<ConfigTicket>(r)),
+    actualizar: (config: ConfigTicket) =>
+      fetchApi("/api/ticket", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(config),
+      }).then((r) => manejarRespuesta<ConfigTicket>(r)),
+    subirLogo: (archivo: File) => {
+      const formData = new FormData();
+      formData.append("archivo", archivo);
+      return fetchApi("/api/ticket/logo", { method: "POST", body: formData }).then((r) =>
+        manejarRespuesta<{ logoUrl: string }>(r)
+      );
+    },
   },
 };
