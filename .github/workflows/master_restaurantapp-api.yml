@@ -1,0 +1,54 @@
+name: Deploy RestaurantApp a Azure App Service
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "RestaurantApp.API/**"
+      - "RestaurantApp.Core/**"
+      - "RestaurantApp.Application/**"
+      - "RestaurantApp.Infrastructure/**"
+      - "RestaurantApp.Client/**"
+      - ".github/workflows/master_restaurantapp-api.yml"
+  workflow_dispatch:
+
+# Nombre de tu App Service en Azure. Cámbialo si elegiste otro nombre al crearlo.
+env:
+  AZURE_WEBAPP_NAME: restaurantapp-api
+
+permissions:
+  id-token: write # requerido para el login OIDC (sin secretos de larga duración)
+  contents: read
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compilar frontend (Vite -> RestaurantApp.API/wwwroot)
+        working-directory: RestaurantApp.Client
+        run: |
+          npm ci
+          npm run build
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Publicar API (incluye el wwwroot recién generado)
+        run: dotnet publish RestaurantApp.API/RestaurantApp.API.csproj -c Release -o publish_output
+
+      - name: Login a Azure (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Desplegar a App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          package: publish_output

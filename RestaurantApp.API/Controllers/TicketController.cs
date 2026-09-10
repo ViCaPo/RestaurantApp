@@ -13,11 +13,11 @@ public class TicketController : ControllerBase
     private static readonly string[] ExtensionesPermitidas = [".png", ".jpg", ".jpeg", ".svg", ".webp"];
 
     private readonly IAppDbContext _db;
-    private readonly IWebHostEnvironment _entorno;
-    public TicketController(IAppDbContext db, IWebHostEnvironment entorno)
+    private readonly IAlmacenamientoArchivos _almacenamiento;
+    public TicketController(IAppDbContext db, IAlmacenamientoArchivos almacenamiento)
     {
         _db = db;
-        _entorno = entorno;
+        _almacenamiento = almacenamiento;
     }
 
     [HttpGet]
@@ -65,22 +65,9 @@ public class TicketController : ControllerBase
         if (!ExtensionesPermitidas.Contains(extension))
             return BadRequest(new { error = "Formato no permitido. Usa PNG, JPG, SVG o WEBP." });
 
-        var carpetaUploads = Path.Combine(_entorno.ContentRootPath, "uploads");
-        Directory.CreateDirectory(carpetaUploads);
+        await using var stream = archivo.OpenReadStream();
+        var logoUrl = await _almacenamiento.GuardarAsync("logo-ticket", extension, stream);
 
-        foreach (var ext in ExtensionesPermitidas)
-        {
-            var anterior = Path.Combine(carpetaUploads, $"logo-ticket{ext}");
-            if (System.IO.File.Exists(anterior)) System.IO.File.Delete(anterior);
-        }
-
-        var rutaDestino = Path.Combine(carpetaUploads, $"logo-ticket{extension}");
-        using (var stream = new FileStream(rutaDestino, FileMode.Create))
-        {
-            await archivo.CopyToAsync(stream);
-        }
-
-        var logoUrl = $"/uploads/logo-ticket{extension}?v={DateTime.UtcNow.Ticks}";
         var config = await _db.ConfigsTicket.FindAsync(1);
         if (config == null)
         {

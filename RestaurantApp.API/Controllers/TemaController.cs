@@ -13,12 +13,12 @@ public class TemaController : ControllerBase
     private static readonly string[] ExtensionesPermitidas = [".png", ".jpg", ".jpeg", ".svg", ".webp"];
 
     private readonly IAppDbContext _db;
-    private readonly IWebHostEnvironment _entorno;
+    private readonly IAlmacenamientoArchivos _almacenamiento;
 
-    public TemaController(IAppDbContext db, IWebHostEnvironment entorno)
+    public TemaController(IAppDbContext db, IAlmacenamientoArchivos almacenamiento)
     {
         _db = db;
-        _entorno = entorno;
+        _almacenamiento = almacenamiento;
     }
 
     [HttpGet]
@@ -72,22 +72,9 @@ public class TemaController : ControllerBase
         if (!ExtensionesPermitidas.Contains(extension))
             return BadRequest(new { error = "Formato no permitido. Usa PNG, JPG, SVG o WEBP." });
 
-        var carpetaUploads = Path.Combine(_entorno.ContentRootPath, "uploads");
-        Directory.CreateDirectory(carpetaUploads);
+        await using var stream = archivo.OpenReadStream();
+        var logoUrl = await _almacenamiento.GuardarAsync("logo", extension, stream);
 
-        foreach (var ext in ExtensionesPermitidas)
-        {
-            var anterior = Path.Combine(carpetaUploads, $"logo{ext}");
-            if (System.IO.File.Exists(anterior)) System.IO.File.Delete(anterior);
-        }
-
-        var rutaDestino = Path.Combine(carpetaUploads, $"logo{extension}");
-        using (var stream = new FileStream(rutaDestino, FileMode.Create))
-        {
-            await archivo.CopyToAsync(stream);
-        }
-
-        var logoUrl = $"/uploads/logo{extension}?v={DateTime.UtcNow.Ticks}";
         var tema = await _db.TemasVisuales.FindAsync(1);
         if (tema == null)
         {

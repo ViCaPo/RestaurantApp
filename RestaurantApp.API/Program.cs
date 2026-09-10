@@ -6,22 +6,31 @@ using RestaurantApp.API.Hubs;
 using RestaurantApp.API.Seguridad;
 using RestaurantApp.Application.Servicios;
 using RestaurantApp.Core.Interfaces;
+using RestaurantApp.Infrastructure.Almacenamiento;
 using RestaurantApp.Infrastructure.Data;
 using RestaurantApp.Infrastructure.Licensing;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Host.UseWindowsService(options => { options.ServiceName = "RestaurantAPI"; });
-builder.WebHost.ConfigureKestrel(options =>
+
+// En Azure App Service la plataforma asigna el puerto vía su propia configuración
+// (variable de entorno), así que ahí dejamos que Kestrel use el binding por defecto.
+// Fuera de App Service (equipo local, Windows Service) seguimos fijos en el 5000.
+var corriendoEnAppService = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WEBSITE_SITE_NAME"));
+if (!corriendoEnAppService)
 {
-    options.ListenAnyIP(5000);
-    // TLS opcional: si se configura un certificado (Seguridad:Https:CertPath),
-    // se habilita HTTPS en el puerto 5001 además del HTTP en 5000.
-    var certPath = builder.Configuration["Seguridad:Https:CertPath"];
-    var certPass = builder.Configuration["Seguridad:Https:CertPassword"];
-    if (!string.IsNullOrEmpty(certPath) && File.Exists(certPath))
-        options.ListenAnyIP(5001, lo => lo.UseHttps(certPath, certPass));
-});
+    builder.WebHost.ConfigureKestrel(options =>
+    {
+        options.ListenAnyIP(5000);
+        // TLS opcional: si se configura un certificado (Seguridad:Https:CertPath),
+        // se habilita HTTPS en el puerto 5001 además del HTTP en 5000.
+        var certPath = builder.Configuration["Seguridad:Https:CertPath"];
+        var certPass = builder.Configuration["Seguridad:Https:CertPassword"];
+        if (!string.IsNullOrEmpty(certPath) && File.Exists(certPath))
+            options.ListenAnyIP(5001, lo => lo.UseHttps(certPath, certPass));
+    });
+}
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("Default")));
@@ -30,6 +39,18 @@ builder.Services.AddScoped<IAppDbContext>(sp => sp.GetRequiredService<AppDbConte
 builder.Services.AddScoped<ComandaService>();
 builder.Services.AddScoped<CajaService>();
 builder.Services.AddScoped<IComandaNotificador, ComandaNotificadorSignalR>();
+
+// Almacenamiento de archivos subidos (logo de la app, logo del ticket): Blob Storage
+// si hay connection string configurada (Azure), disco local en caso contrario.
+builder.Services.AddSingleton<IAlmacenamientoArchivos>(sp =>
+{
+    var storageConnectionString = builder.Configuration["Storage:Azure:ConnectionString"];
+    if (!string.IsNullOrEmpty(storageConnectionString))
+        return new AlmacenamientoBlobAzure(storageConnectionString, "uploads");
+
+    var env = sp.GetRequiredService<IWebHostEnvironment>();
+    return new AlmacenamientoLocalDisco(Path.Combine(env.ContentRootPath, "uploads"));
+});
 
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
@@ -67,17 +88,25 @@ ModuleLoader.RegistrarModulosActivos(builder.Services, licencia);
 
 var app = builder.Build();
 
-var carpetaUploads = Path.Combine(app.Environment.ContentRootPath, "uploads");
-Directory.CreateDirectory(carpetaUploads);
-
 app.UseCors("LocalNetwork");
 app.UseDefaultFiles();
 app.UseStaticFiles();
-app.UseStaticFiles(new StaticFileOptions
+
+// Con Blob Storage configurado (Azure), las URLs de los archivos apuntan directo a la
+// cuenta de storage, así que no hace falta servir "/uploads" ni crear esa carpeta local
+// (en App Service con despliegue "Run From Package" el filesystem del sitio es de solo
+// lectura y crearla ahí tiraría abajo el arranque).
+if (string.IsNullOrEmpty(builder.Configuration["Storage:Azure:ConnectionString"]))
 {
-    FileProvider = new PhysicalFileProvider(carpetaUploads),
-    RequestPath = "/uploads",
-});
+    var carpetaUploads = Path.Combine(app.Environment.ContentRootPath, "uploads");
+    Directory.CreateDirectory(carpetaUploads);
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        FileProvider = new PhysicalFileProvider(carpetaUploads),
+        RequestPath = "/uploads",
+    });
+}
+
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
